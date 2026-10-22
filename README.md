@@ -32,7 +32,7 @@ python server.py
 ### Option B: Poetry
 
 ```bash
-poetry install
+poetry install --no-root
 poetry run python server.py
 ```
 
