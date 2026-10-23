@@ -1,2 +1,4 @@
 mcp>=1.23,<2
 uvicorn
+boto3
+tzdata

@@ -27,7 +27,7 @@ async def main():
     user_a = f"demo-{uuid.uuid4().hex[:8]}"
     user_b = f"demo-{uuid.uuid4().hex[:8]}"
 
-    async with streamablehttp_client(URL, headers={"X-User-Id": user_a}) as (read, write, _):
+    async with streamablehttp_client(URL, headers={"X-User-Id": user_a, "X-Timezone": "Asia/Kolkata"}) as (read, write, _):
         async with ClientSession(read, write) as session:
             init = await session.initialize()
             print(f"Connected as {user_a}. Protocol version: {init.protocolVersion}")
@@ -50,6 +50,8 @@ async def main():
             guess = next(a for k, a in ANSWERS.items() if k in data2["question"].lower())
             show(f"check_answer(answer={guess!r})", await session.call_tool(
                 "check_answer", {"question_id": data2["question_id"], "answer": guess}))
+            show("generate_flashcards_from_notes(...)  # Bedrock if configured, else rule-based", await session.call_tool(
+                "generate_flashcards_from_notes", {"notes": "Osmosis is the movement of water across a membrane.", "subject": "biology"}))
             show("plan_revision('biology', days=3)", await session.call_tool(
                 "plan_revision", {"subject": "biology", "days": 3}))
             show("list_study_tasks()", await session.call_tool("list_study_tasks", {}))

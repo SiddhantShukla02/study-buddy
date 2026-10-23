@@ -29,30 +29,62 @@ aside h2{font-size:14px;margin:0;padding:18px 18px 10px;color:var(--dim);font-we
 #trace{flex:1;overflow:auto;padding:0 18px 18px;font:12px/1.5 ui-monospace,Menlo,monospace}
 .t{border-left:3px solid var(--ring);padding:2px 0 2px 10px;margin-bottom:12px}
 .t b{color:var(--ring)}.t pre{margin:4px 0 0;white-space:pre-wrap;word-break:break-word;color:var(--dim)}
+.badge{margin-left:auto;font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:99px;padding:4px 12px;white-space:nowrap}
+.badge.live{color:var(--ring);border-color:var(--ring)}
+.tools{display:flex;gap:8px;padding:0 22px 10px;flex-wrap:wrap}
+.tools button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:5px 10px;cursor:pointer;font:inherit;font-size:13px}
+.tools button[aria-pressed=true]{border-color:var(--ring);color:var(--ink)}
+.tools button:hover,.tools button:focus-visible{border-color:var(--ring);color:var(--ink);outline:none}
+.warn{color:#ffb454;font:13px/1.4 "Segoe UI",system-ui,sans-serif;margin:0 0 12px}
 .empty{color:var(--dim);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
 </style></head><body>
 <main>
-<header><div class="ring" id="ring"></div><div><h1>StudyBuddy</h1><span>Simulated Alexa+ skill. Talks to the MCP server at /mcp</span></div></header>
+<header><div class="ring" id="ring"></div><div><h1>StudyBuddy</h1><span>Simulated Alexa+. Every tool call goes over real MCP to /mcp</span></div><div class="badge" id="badge" role="status">checking...</div></header>
 <div id="log"><div class="m a">Hi, I'm StudyBuddy. Ask for a quiz, save your own flashcards, get a revision plan, or check your progress.</div></div>
 <div class="chips" id="chips"></div>
+<div class="tools"><button type="button" id="mic" aria-pressed="false">Mic: off</button><button type="button" id="spk" aria-pressed="false">Speak replies: off</button><button type="button" id="new">New learner</button></div>
 <form id="f"><input id="q" autocomplete="off" placeholder="Say something to Alexa..." aria-label="Message"><button>Send</button></form>
 </main>
 <aside><h2>MCP tool calls</h2><div id="trace"><p class="empty">Tool calls the server handles will appear here.</p></div></aside>
 <script>
-const log=document.getElementById('log'),trace=document.getElementById('trace'),ring=document.getElementById('ring');
+const log=document.getElementById('log'),trace=document.getElementById('trace'),ring=document.getElementById('ring'),
+ badge=document.getElementById('badge'),mic=document.getElementById('mic'),spk=document.getElementById('spk');
+let session;
+try{session=localStorage.getItem('sb-session')}catch(e){}
+if(!session){session=Math.random().toString(36).slice(2,12);try{localStorage.setItem('sb-session',session)}catch(e){}}
+const tz=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){return ''}})();
 const add=(c,t)=>{const d=document.createElement('div');d.className='m '+c;d.textContent=t;log.append(d);log.scrollTop=log.scrollHeight};
-["Quiz me on biology","Remember that mitosis is cell division","Quiz me","How am I doing?","Plan 4 days for math","Add a task to read chapter 5","What's on my list?"].forEach(s=>{
- const b=document.createElement('button');b.type='button';b.textContent=s;b.onclick=()=>send(s);chips.append(b)});
+let speak=false;
+function say(t){if(speak&&'speechSynthesis' in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(t))}}
+["Quiz me on biology","Remember that mitosis is cell division","Quiz me","How am I doing?","Plan 4 days for math","Add a task to read chapter 5","What's on my list?",
+ "Make flashcards from: Osmosis is the movement of water across a membrane. Diffusion is the spread of particles from high to low concentration."].forEach(s=>{
+ const b=document.createElement('button');b.type='button';b.textContent=s.length>40?s.slice(0,37)+'...':s;b.title=s;b.onclick=()=>send(s);chips.append(b)});
+fetch('/api/health').then(r=>r.json()).then(h=>{
+ badge.textContent=h.agent==='bedrock'?'LLM agent: Amazon Bedrock':'Keyword mode (no LLM configured)';badge.classList.toggle('live',h.agent==='bedrock')
+}).catch(()=>{badge.textContent='server unreachable'});
+function showCalls(j){
+ if(j.note){const w=document.createElement('p');w.className='warn';w.textContent=j.note;if(trace.querySelector('.empty'))trace.innerHTML='';trace.append(w)}
+ if(j.calls.length&&trace.querySelector('.empty'))trace.innerHTML='';
+ j.calls.forEach(c=>{const d=document.createElement('div');d.className='t';
+  d.innerHTML='<b></b><pre></pre>';d.querySelector('b').textContent=c.tool+'('+Object.entries(c.args).map(([k,v])=>k+'='+JSON.stringify(v)).join(', ')+')';
+  d.querySelector('pre').textContent=JSON.stringify(c.result,null,1);trace.append(d)});
+ trace.scrollTop=trace.scrollHeight}
 async function send(text){
  if(!text.trim())return;add('u',text);ring.classList.add('busy');
  try{
-  const r=await fetch('/api/utter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
-  const j=await r.json();add('a',j.say);
-  if(j.calls.length&&trace.querySelector('.empty'))trace.innerHTML='';
-  j.calls.forEach(c=>{const d=document.createElement('div');d.className='t';
-   d.innerHTML='<b></b><pre></pre>';d.querySelector('b').textContent=c.tool+'('+Object.entries(c.args).map(([k,v])=>k+'='+JSON.stringify(v)).join(', ')+')';
-   d.querySelector('pre').textContent=JSON.stringify(c.result,null,1);trace.append(d);trace.scrollTop=trace.scrollHeight});
+  const r=await fetch('/api/utter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,session,tz})});
+  const j=await r.json();add('a',j.say);say(j.say);showCalls(j);
+  if(j.mode==='agent'){badge.textContent='LLM agent: Amazon Bedrock';badge.classList.add('live')}
  }catch(e){add('a','Could not reach the server. Is it still running?')}
  ring.classList.remove('busy')}
 f.onsubmit=e=>{e.preventDefault();const v=q.value;q.value='';send(v)};
+spk.onclick=()=>{speak=!speak;spk.setAttribute('aria-pressed',speak);spk.textContent='Speak replies: '+(speak?'on':'off');if(!speak&&'speechSynthesis' in window)speechSynthesis.cancel()};
+document.getElementById('new').onclick=()=>{try{localStorage.removeItem('sb-session')}catch(e){}location.reload()};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!SR){mic.disabled=true;mic.textContent='Mic: not supported in this browser'}
+else{const rec=new SR();rec.lang='en-US';rec.interimResults=false;
+ rec.onresult=e=>{send(e.results[0][0].transcript)};
+ rec.onend=()=>{mic.setAttribute('aria-pressed','false');mic.textContent='Mic: off'};
+ rec.onerror=()=>{mic.setAttribute('aria-pressed','false');mic.textContent='Mic: off'};
+ mic.onclick=()=>{try{rec.start();mic.setAttribute('aria-pressed','true');mic.textContent='Listening...'}catch(e){}}}
 </script></body></html>

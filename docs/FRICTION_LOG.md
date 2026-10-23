@@ -24,3 +24,9 @@
 - **Severity:** Low.
 - **Workaround:** Used a virtualenv.
 - **Suggestion:** Recommend a virtualenv in the install docs.
+
+## 4. Anthropic use-case form for models
+- **Task:** Fill form to get Bedrock models
+- **Actual:** The form only appeared when i was selecting a particular model.
+- **Severity:** Low.
+- **Workaround:** Had to make a new personal AWS account and start fresh.

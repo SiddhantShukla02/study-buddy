@@ -60,3 +60,15 @@ def test_empty_correct_answer_never_matches():
 def test_filler_words_are_ignored_but_content_words_still_count():
     check([("mitochondrion", "the mitochondria"), ("powerhouse cell", "the powerhouse of the cell")], True)
     check([("the", "the mitochondria"), ("the cell", "the powerhouse of the cell")], False)
+
+
+# ---------------------------------------------------------------- spoken numbers & plurals
+def test_spoken_numbers_match_digit_answers():
+    check([("fifty six", "56"), ("nineteen forty seven", "1947"), ("one thousand nine hundred forty seven", "1947"),
+           ("it is twelve", "12"), ("two x", "2x"), ("D N A", "dna")], True)
+    check([("fifty five", "56"), ("nineteen forty eight", "1947"), ("five six", "56")], False)
+
+
+def test_plurals_are_folded_in_multi_word_answers():
+    check([("division of cells", "cell division"), ("cells division", "cell division")], True)
+    check([("cells", "cell division")], False)

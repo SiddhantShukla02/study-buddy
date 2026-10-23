@@ -9,9 +9,14 @@ A correct answer moves it up one box (reviewed less often); a miss sends it back
 box 1 and keeps it due today, so it returns in the same session until you get it right.
 """
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from grading import grade
+
+# Input limits keep a public endpoint from being filled with junk.
+MAX_FRONT, MAX_BACK, MAX_TITLE, MAX_SUBJECT = 300, 300, 200, 40
+MAX_CARDS_PER_USER, MAX_TASKS_PER_USER = 500, 500
 
 INTERVALS = {1: 1, 2: 2, 3: 4, 4: 8, 5: 16}  # box -> days until the next review
 MAX_BOX = max(INTERVALS)
@@ -69,6 +74,10 @@ CREATE TABLE IF NOT EXISTS reviews(
   ok   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reviews_user_day ON reviews(user, day);
+CREATE TABLE IF NOT EXISTS users(
+  user TEXT PRIMARY KEY,
+  tz   TEXT NOT NULL
+);
 """
 
 
@@ -82,6 +91,36 @@ def connect(path: str = ":memory:") -> sqlite3.Connection:
 
 def _today(today: date | None) -> date:
     return today or date.today()
+
+
+# ------------------------------------------------------------------ timezones
+def valid_tz(name: str | None) -> bool:
+    """True if `name` is an IANA timezone such as 'Asia/Kolkata' that this machine knows."""
+    if not name or len(name) > 64:
+        return False
+    try:
+        ZoneInfo(name)
+        return True
+    except Exception:
+        return False
+
+
+def local_today(tz: str | None) -> date:
+    """Today's date for a learner in `tz` (UTC if unknown), so streaks follow their own midnight."""
+    return datetime.now(ZoneInfo(tz) if valid_tz(tz) else ZoneInfo("UTC")).date()
+
+
+def get_tz(db, user) -> str | None:
+    row = db.execute("SELECT tz FROM users WHERE user=?", (user,)).fetchone()
+    return row["tz"] if row else None
+
+
+def set_tz(db, user, tz: str) -> dict:
+    if not valid_tz(tz):
+        return {"error": f"I don't know the timezone {tz!r}. Try something like Asia/Kolkata or America/New_York."}
+    db.execute("INSERT INTO users(user, tz) VALUES (?,?) ON CONFLICT(user) DO UPDATE SET tz=excluded.tz", (user, tz))
+    db.commit()
+    return {"timezone": tz}
 
 
 # ------------------------------------------------------------------ cards
@@ -101,13 +140,18 @@ def add_card(db, user, front, back, subject="general", today=None) -> dict:
     front, back = front.strip(), back.strip()
     if not front or not back:
         return {"error": "A flashcard needs both a question and an answer."}
+    if len(front) > MAX_FRONT or len(back) > MAX_BACK:
+        return {"error": f"Keep flashcards short: questions up to {MAX_FRONT} characters, answers up to {MAX_BACK}."}
     seed(db, user, today)
+    subj = subject.strip().lower()[:MAX_SUBJECT] or "general"
+    if db.execute("SELECT COUNT(*) FROM cards WHERE user=?", (user,)).fetchone()[0] >= MAX_CARDS_PER_USER:
+        return {"error": f"You've reached the limit of {MAX_CARDS_PER_USER} flashcards."}
     cur = db.execute(
         "INSERT INTO cards(user, subject, front, back, due) VALUES (?,?,?,?,?)",
-        (user, subject.strip().lower() or "general", front, back, _today(today).isoformat()),
+        (user, subj, front, back, _today(today).isoformat()),
     )
     db.commit()
-    return {"card_id": cur.lastrowid, "subject": subject.strip().lower() or "general"}
+    return {"card_id": cur.lastrowid, "subject": subj}
 
 
 def subjects(db, user) -> list[str]:
@@ -143,10 +187,17 @@ def check_answer(db, user, question_id, answer, today=None) -> dict:
         return {"error": "That question doesn't exist. Ask for a new quiz."}
     day = _today(today)
     ok = grade(answer, card["back"])
-    box = min(card["box"] + 1, MAX_BOX) if ok else 1
-    # A miss stays due today, so it comes straight back in the same session.
-    days = INTERVALS[box] if ok else 0
-    due = (day + timedelta(days=days)).isoformat()
+    was_due = card["due"] <= day.isoformat()
+    if ok and not was_due:
+        # Re-answering a card that is not due yet must not inflate its box (no farming the schedule).
+        box = card["box"]
+        due = card["due"]
+        days = max(0, (date.fromisoformat(due) - day).days)
+    else:
+        box = min(card["box"] + 1, MAX_BOX) if ok else 1
+        # A miss stays due today, so it comes straight back in the same session.
+        days = INTERVALS[box] if ok else 0
+        due = (day + timedelta(days=days)).isoformat()
     db.execute(
         "UPDATE cards SET box=?, due=?, seen=seen+1, missed=missed+? WHERE id=?",
         (box, due, 0 if ok else 1, card_id),
@@ -166,9 +217,14 @@ def add_task(db, user, title, subject="general", due_in_days=1, today=None) -> d
     title = title.strip()
     if not title:
         return {"error": "A task needs a title."}
+    if len(title) > MAX_TITLE:
+        return {"error": f"Keep task titles under {MAX_TITLE} characters."}
+    due_in_days = max(0, min(int(due_in_days), 365))
+    if db.execute("SELECT COUNT(*) FROM tasks WHERE user=?", (user,)).fetchone()[0] >= MAX_TASKS_PER_USER:
+        return {"error": f"You've reached the limit of {MAX_TASKS_PER_USER} tasks."}
     num = db.execute("SELECT COALESCE(MAX(num), 0) + 1 FROM tasks WHERE user=?", (user,)).fetchone()[0]
     due = (_today(today) + timedelta(days=due_in_days)).isoformat()
-    subject = subject.strip().lower() or "general"
+    subject = subject.strip().lower()[:MAX_SUBJECT] or "general"
     db.execute(
         "INSERT INTO tasks(user, num, title, subject, due) VALUES (?,?,?,?,?)",
         (user, num, title, subject, due),

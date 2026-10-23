@@ -1,8 +1,9 @@
-.venv/
-.pytest_cache/
-venv/
-__pycache__/
+
+*.db
 *.pyc
 .env
+.pytest_cache/
+.venv/
+__pycache__/
 studybuddy.db
-*.db
+venv/

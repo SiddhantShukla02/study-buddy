@@ -1,7 +1,7 @@
 [project]
 name = "study-buddy"
 version = "0.1.0"
-description = ""
+description = "StudyBuddy: a spaced-repetition study partner as an MCP server for Alexa+"
 authors = [
     {name = "SiddhantShukla02", email = "77145400+SiddhantShukla02@users.noreply.github.com"},
     {name = "SahilSingh", email = "97498411+sahilrajput18@users.noreply.github.com"}
@@ -11,7 +11,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "mcp (>=1.23,<2)",
-    "uvicorn (>=0.54.0,<0.55.0)"
+    "uvicorn (>=0.30)",
+    "boto3 (>=1.35)",
+    "tzdata"
 ]
 
 

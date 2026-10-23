@@ -238,3 +238,48 @@ def test_accuracy_and_weakest_subjects():
     s = store.summary(db, "a", D0)
     assert s["answered"] == 4 and s["accuracy"] == 0.5
     assert s["weakest_subjects"] == ["math", "biology"]  # 100% missed, then 50%; history excluded
+
+
+# ---------------------------------------------------------------- limits, timezones, anti-farming
+def test_input_limits_are_enforced():
+    db = fresh()
+    assert store.add_card(db, "a", "q" * 301, "x", today=D0).get("error")
+    assert store.add_card(db, "a", "q", "x" * 301, today=D0).get("error")
+    assert store.add_task(db, "a", "t" * 201, today=D0).get("error")
+    assert store.add_task(db, "a", "ok", due_in_days=-5, today=D0)["due"] == D0.isoformat()  # clamped to today
+    assert store.add_card(db, "a", "q", "a", "s" * 100, today=D0)["subject"] == "s" * store.MAX_SUBJECT
+
+
+def test_per_user_caps(monkeypatch=None):
+    db = fresh()
+    old = store.MAX_TASKS_PER_USER
+    store.MAX_TASKS_PER_USER = 2
+    try:
+        assert "id" in store.add_task(db, "a", "one", today=D0)
+        assert "id" in store.add_task(db, "a", "two", today=D0)
+        assert "limit" in store.add_task(db, "a", "three", today=D0)["error"]
+        assert "id" in store.add_task(db, "b", "other user is unaffected", today=D0)
+    finally:
+        store.MAX_TASKS_PER_USER = old
+
+
+def test_timezone_validation_and_storage():
+    db = fresh()
+    assert store.valid_tz("Asia/Kolkata") and not store.valid_tz("Mars/Olympus") and not store.valid_tz(None)
+    assert store.get_tz(db, "a") is None
+    assert store.set_tz(db, "a", "Asia/Kolkata") == {"timezone": "Asia/Kolkata"}
+    assert store.set_tz(db, "a", "America/New_York")["timezone"] == "America/New_York"  # update in place
+    assert store.get_tz(db, "a") == "America/New_York" and store.get_tz(db, "b") is None
+    assert store.set_tz(db, "a", "nope").get("error")
+    assert isinstance(store.local_today("Asia/Kolkata"), date) and isinstance(store.local_today("bad"), date)
+
+
+def test_reanswering_a_card_that_is_not_due_does_not_inflate_its_box():
+    db = fresh()
+    cid = find_question(db, "a", "math", "56")
+    store.check_answer(db, "a", str(cid), "56", today=D0)             # due: box 2, back in 2 days
+    r = store.check_answer(db, "a", str(cid), "56", today=D0)         # not due: no promotion
+    assert r["correct"] is True and r["box"] == 2 and r["next_review_in_days"] == 2
+    assert card_row(db, "a", cid)["due"] == (D0 + timedelta(days=2)).isoformat()
+    r = store.check_answer(db, "a", str(cid), "banana", today=D0)     # a miss still resets, even early
+    assert r["box"] == 1 and r["next_review_in_days"] == 0

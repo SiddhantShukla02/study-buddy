@@ -1,0 +1,19 @@
+# Render Blueprint: New > Blueprint > pick this repo. Secrets are entered in the dashboard, never committed.
+services:
+  - type: web
+    name: study-buddy
+    runtime: docker
+    healthCheckPath: /api/health
+    envVars:
+      - key: STUDYBUDDY_DB
+        value: /tmp/studybuddy.db        # resets on redeploy; attach a disk and change the path to persist
+      - key: STUDYBUDDY_ALLOWED_HOSTS
+        sync: false                      # e.g. study-buddy-xxxx.onrender.com (your service hostname)
+      - key: BEDROCK_MODEL_ID
+        sync: false                      # optional: enables the Amazon Bedrock agent + AI flashcards
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
