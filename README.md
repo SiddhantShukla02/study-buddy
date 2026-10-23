@@ -1,10 +1,11 @@
 # StudyBuddy: an MCP server for Alexa+
 
-**Demo video:** <youtube link>  |  **Live server:** https://YOUR-HOST
+**Demo video:** (link coming soon)  |  **Live server:** https://study-buddy-q49m.onrender.com
 
-The public instance runs in offline keyword mode so it can't spend anyone's AWS credits. The Amazon Bedrock agent
-and AI flashcards are shown in the demo video; anyone can enable them by filling a `.env` file (see "Turn on the
-Amazon Bedrock agent").
+**NOTE:** Free hosting: the first load may take about a minute to wake up, and data resets on restart.
+The public instance runs in offline keyword mode so it can't spend anyone's AWS credits.
+The Amazon Bedrock agent and AI flashcards are shown in the demo video; anyone can enable them
+by filling a `.env` file (see "Turn on the Amazon Bedrock agent").
 
 StudyBuddy turns a voice assistant into a study partner that **remembers what you get wrong**. It quizzes
 you with spaced repetition, turns your own notes into flashcards (with AI, via Amazon Bedrock, or offline),
@@ -13,8 +14,6 @@ builds revision plans, tracks study tasks and reports your progress. Every learn
 It is a self-hosted **MCP server** (spec 2025-11-25, Streamable HTTP) built with the official Python SDK,
 plus an **agentic Alexa+ simulator**: an LLM agent that discovers the server's tools over real MCP and
 decides for itself which to call.
-
-**Demo video:** `TODO: paste your YouTube/Vimeo link`  |  **Live server:** `TODO: paste your deployed URL`
 
 ## Architecture
 
