@@ -1,6 +1,6 @@
 # StudyBuddy: an MCP server for Alexa+
 
-**Demo video:** (link coming soon)  |  **Live server:** https://study-buddy-q49m.onrender.com
+**Demo video:** https://youtu.be/Dg44JdWVqrU  |  **Live server:** https://study-buddy-q49m.onrender.com
 
 **NOTE:** Free hosting: the first load may take about a minute to wake up, and data resets on restart.
 The public instance runs in offline keyword mode so it can't spend anyone's AWS credits.
